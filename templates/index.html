@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meshtastic MQTT Interface</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 0;
+            min-height: 600px;
+        }
+
+        .message-log {
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .log-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .log-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .clear-button {
+            padding: 8px 16px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .clear-button:hover {
+            background: #c82333;
+            transform: translateY(-1px);
+        }
+
+        .clear-button:active {
+            transform: translateY(0);
+        }
+
+        .log-title {
+            font-size: 1.5rem;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .status {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 15px;
+            background: #fafafa;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            border-left: 4px solid;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .message.received {
+            border-left-color: #28a745;
+        }
+
+        .message.sent {
+            border-left-color: #007bff;
+        }
+
+        .message.system {
+            border-left-color: #ffc107;
+        }
+
+        .message.error {
+            border-left-color: #dc3545;
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+
+        .message-type {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .message-timestamp {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        .message-content {
+            color: #333;
+            line-height: 1.4;
+        }
+
+        .message-details {
+            margin-top: 8px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .send-panel {
+            padding: 30px;
+            background: #f8f9fa;
+        }
+
+        .send-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .form-select, .form-input, .form-textarea {
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .form-select:focus, .form-input:focus, .form-textarea:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .send-button {
+            padding: 15px 30px;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .send-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.4);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .device-info {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .device-info h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .device-list {
+            font-size: 0.9rem;
+            color: #666;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .message-log {
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌐 Meshtastic MQTT Interface</h1>
+        </div>
+
+        <div class="main-content">
+            <div class="message-log">
+                <div class="log-header">
+                    <h2 class="log-title">Message Log</h2>
+                    <div class="log-controls">
+                        <button id="clearButton" class="clear-button">Clear Messages</button>
+                        <span id="status" class="status disconnected">Disconnected</span>
+                    </div>
+                </div>
+                <div id="messages" class="messages">
+                    <!-- Messages will appear here -->
+                </div>
+            </div>
+
+            <div class="send-panel">
+                <div class="device-info">
+                    <h3>Available Devices</h3>
+                    <div class="device-list">
+                        <strong>fa6f1418</strong> (4201583640)<br>
+                        <strong>435722f4</strong> (1129784052)
+                    </div>
+                </div>
+
+                <form id="sendForm" class="send-form">
+                    <div class="form-group">
+                        <label for="deviceId" class="form-label">Send as Device:</label>
+                        <select id="deviceId" class="form-select" required>
+                            <option value="">Select a device...</option>
+                            <option value="fa6f1418">fa6f1418 (4201583640)</option>
+                            <option value="435722f4">435722f4 (1129784052)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="message" class="form-label">Message:</label>
+                        <textarea id="message" class="form-textarea" placeholder="Enter your message here..." required></textarea>
+                    </div>
+
+                    <button type="submit" class="send-button">Send Message</button>
+                </form>
+
+                <div id="errorMessage" class="error-message"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO connection
+        const socket = io();
+        
+        // DOM elements
+        const messagesDiv = document.getElementById('messages');
+        const sendForm = document.getElementById('sendForm');
+        const deviceIdSelect = document.getElementById('deviceId');
+        const messageTextarea = document.getElementById('message');
+        const sendButton = sendForm.querySelector('.send-button');
+        const statusSpan = document.getElementById('status');
+        const errorDiv = document.getElementById('errorMessage');
+        const clearButton = document.getElementById('clearButton');
+
+        // Connection status
+        socket.on('connect', function() {
+            console.log('Connected to server');
+            statusSpan.textContent = 'Connected';
+            statusSpan.className = 'status connected';
+        });
+
+        socket.on('disconnect', function() {
+            console.log('Disconnected from server');
+            statusSpan.textContent = 'Disconnected';
+            statusSpan.className = 'status disconnected';
+        });
+
+        // New message handler
+        socket.on('new_message', function(data) {
+            addMessageToLog(data);
+        });
+
+        // Error handler
+        socket.on('error', function(data) {
+            showError(data.message);
+        });
+
+        // Messages cleared handler
+        socket.on('messages_cleared', function() {
+            messagesDiv.innerHTML = '';
+        });
+
+        // Add message to log
+        function addMessageToLog(messageData) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${messageData.type}`;
+            
+            messageDiv.innerHTML = `
+                <div class="message-header">
+                    <span class="message-type">${messageData.type}</span>
+                    <span class="message-timestamp">${messageData.timestamp}</span>
+                </div>
+                <div class="message-content">${escapeHtml(messageData.content)}</div>
+                ${messageData.topic ? `<div class="message-details">Topic: ${escapeHtml(messageData.topic)}</div>` : ''}
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Send message form handler
+        sendForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const deviceId = deviceIdSelect.value;
+            const messageText = messageTextarea.value.trim();
+            
+            if (!deviceId || !messageText) {
+                showError('Please select a device and enter a message');
+                return;
+            }
+
+            // Disable send button temporarily
+            sendButton.disabled = true;
+            sendButton.textContent = 'Sending...';
+            
+            // Send message via Socket.IO
+            socket.emit('send_message', {
+                device_id: deviceId,
+                message: messageText
+            });
+
+            // Clear form and re-enable button
+            messageTextarea.value = '';
+            setTimeout(() => {
+                sendButton.disabled = false;
+                sendButton.textContent = 'Send Message';
+            }, 1000);
+            
+            hideError();
+        });
+
+        // Clear messages button handler
+        clearButton.addEventListener('click', function() {
+            // Clear messages locally
+            messagesDiv.innerHTML = '';
+            
+            // Send clear command to server
+            socket.emit('clear_messages');
+            
+            hideError();
+        });
+
+        // Utility functions
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        // Auto-focus message textarea
+        messageTextarea.focus();
+    </script>
+</body>
+</html> 
